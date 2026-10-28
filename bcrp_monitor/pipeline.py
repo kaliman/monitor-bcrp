@@ -6,6 +6,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from .config import Config
+from .constants import BASELINE_MARKER, DAY_FORMAT
 from .extract import mark_relevant, parse_pdf
 from .http import HttpClient
 from .i18n import load_locale
@@ -43,7 +44,7 @@ def _iso(value: datetime) -> str:
 
 
 def local_day(config: Config) -> str:
-    return local_now(config).strftime("%Y%m%d")
+    return local_now(config).strftime(DAY_FORMAT)
 
 
 def _build_source(config: Config) -> ElPeruano:
@@ -127,7 +128,7 @@ def _heartbeat(
     now: datetime,
     dry: bool,
 ) -> None:
-    day = now.strftime("%Y%m%d")
+    day = now.strftime(DAY_FORMAT)
     text = render_no_news(day, messages, config.source.name)
     if dry:
         log.info("DRY-RUN\n%s", plain_of(text))
@@ -153,8 +154,8 @@ def run_monitor(
     first_run = not state.days and not state.seen and not state.last_run
     if first_run:
         for back in range(1, config.app.baseline_days + 1):
-            state.days[(now_local - timedelta(days=back)).strftime("%Y%m%d")] = (
-                "baseline"
+            state.days[(now_local - timedelta(days=back)).strftime(DAY_FORMAT)] = (
+                BASELINE_MARKER
             )
         log.info("First run: baseline established.")
 
@@ -177,7 +178,7 @@ def run_monitor(
     pending = sorted(
         day
         for day in (
-            (now_local - timedelta(days=back)).strftime("%Y%m%d")
+            (now_local - timedelta(days=back)).strftime(DAY_FORMAT)
             for back in range(config.app.lookback_days)
         )
         if day not in state.days

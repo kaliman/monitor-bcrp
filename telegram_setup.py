@@ -15,10 +15,11 @@ from bcrp_monitor.config import (
     ConfigError,
     load_secrets,
 )
+from bcrp_monitor.constants import TELEGRAM_API_BASE, TELEGRAM_WEB_BASE
 
 
 def api(token: str, method: str, **params) -> dict:
-    url = f"https://api.telegram.org/bot{token}/{method}"
+    url = f"{TELEGRAM_API_BASE}/bot{token}/{method}"
     if params:
         url += "?" + urllib.parse.urlencode(params)
     with urllib.request.urlopen(url, timeout=30) as response:
@@ -93,7 +94,7 @@ def main() -> int:
     chats = chats_from(updates)
 
     if not chats:
-        print(f"\nNo messages yet. Open https://t.me/{bot['username']} and press START.")
+        print(f"\nNo messages yet. Open {TELEGRAM_WEB_BASE}/{bot['username']} and press START.")
         return 1
 
     print("\nChats found:")

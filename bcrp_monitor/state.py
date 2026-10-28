@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .config import ROOT
+from .constants import BASELINE_MARKER
 
 log = logging.getLogger(__name__)
 
@@ -39,7 +40,9 @@ def _normalize_map(values: dict, label: str) -> dict[str, str]:
     for key, value in values.items():
         if not isinstance(key, str) or not isinstance(value, str):
             raise StateError(f"state.{label} must map strings to strings")
-        normalized[key] = "baseline" if value == "baseline" else _to_utc(value)
+        normalized[key] = (
+            BASELINE_MARKER if value == BASELINE_MARKER else _to_utc(value)
+        )
     return normalized
 
 
@@ -112,7 +115,7 @@ class State:
         cutoff = reference - timedelta(days=max(0, retention_days))
 
         def keep(value: str) -> bool:
-            if value == "baseline":
+            if value == BASELINE_MARKER:
                 return True
             try:
                 parsed = datetime.fromisoformat(value)

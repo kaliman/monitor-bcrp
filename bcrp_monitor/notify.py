@@ -12,14 +12,16 @@ import uuid
 from email.message import EmailMessage
 
 from .config import Secrets
+from .constants import (
+    DEFAULT_PDF_NAME,
+    SMTP_HOST,
+    SMTP_PORT,
+    TELEGRAM_API_BASE,
+    TELEGRAM_CAPTION_LIMIT,
+)
 from .render import plain_of
 
 log = logging.getLogger(__name__)
-
-TELEGRAM_API = "https://api.telegram.org"
-TELEGRAM_CAPTION_LIMIT = 1024
-SMTP_HOST = "smtp.gmail.com"
-SMTP_PORT = 465
 
 
 def _safe_error(exc: Exception) -> str:
@@ -29,7 +31,7 @@ def _safe_error(exc: Exception) -> str:
 
 def _safe_filename(name: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-")
-    return cleaned or "notice.pdf"
+    return cleaned or DEFAULT_PDF_NAME
 
 
 class Telegram:
@@ -109,7 +111,7 @@ class Telegram:
         timeout: int,
         content_type: str | None = None,
     ) -> None:
-        url = f"{TELEGRAM_API}/bot{self._token}/{method}"
+        url = f"{TELEGRAM_API_BASE}/bot{self._token}/{method}"
         headers = {"Content-Type": content_type} if content_type else {}
         request = urllib.request.Request(url, data=data, headers=headers)
         with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -132,7 +134,7 @@ class Gmail:
         subject: str,
         html: str,
         pdf: bytes | None = None,
-        filename: str = "notice.pdf",
+        filename: str = DEFAULT_PDF_NAME,
     ) -> bool:
         if not self.enabled:
             return False

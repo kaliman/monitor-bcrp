@@ -7,6 +7,7 @@ from html import unescape
 from urllib.parse import urljoin
 
 from .config import SourceSettings
+from .constants import PDF_MAGIC
 from .http import FetchError, HttpClient
 from .models import Hit
 
@@ -62,7 +63,7 @@ class ElPeruano:
         except FetchError as exc:
             log.warning("Gazette PDF %s failed (%s)", day, type(exc).__name__)
             return None
-        if data[:4] != b"%PDF":
+        if not data.startswith(PDF_MAGIC):
             log.warning("Gazette PDF %s is not a PDF", day)
             return None
         return data
@@ -104,4 +105,4 @@ class ElPeruano:
                 type(exc).__name__,
             )
             return None
-        return data if data[:4] == b"%PDF" else None
+        return data if data.startswith(PDF_MAGIC) else None

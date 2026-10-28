@@ -6,11 +6,12 @@ import re
 from datetime import datetime
 from html import escape, unescape
 
+from .constants import DAY_FORMAT
 from .models import Hit
 
 
 def fmt_day(day: str, messages: dict[str, str]) -> str:
-    return datetime.strptime(day, "%Y%m%d").strftime(
+    return datetime.strptime(day, DAY_FORMAT).strftime(
         messages.get("date_format", "%d/%m/%Y")
     )
 

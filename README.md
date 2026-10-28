@@ -21,6 +21,7 @@ Runs on GitHub Actions. No local scheduler is needed.
 bcrp_monitor/
   cli.py          CLI and logging
   config.py       env + config.local.json + settings.toml loader
+  constants.py    protocol and format constants (Telegram, SMTP, PDF)
   http.py         HTTP client with retries
   source.py       El Peruano URLs and downloads
   extract.py      PDF parsing
