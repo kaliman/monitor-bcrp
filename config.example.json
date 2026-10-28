@@ -1,0 +1,14 @@
+{
+  "telegram": {
+    "bot_token": "123456789:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "chat_id": "123456789"
+  },
+  "gmail": {
+    "user": "you@gmail.com",
+    "app_password": "xxxxxxxxxxxxxxxx",
+    "to": "you@gmail.com"
+  },
+  "locale": "es",
+  "notify_when_nothing": true,
+  "min_seconds_between_runs": 90
+}

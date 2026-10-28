@@ -1,0 +1,13 @@
+{
+  "date_format": "%d/%m/%Y",
+  "hit_header": "<b>{kind} N° {number}</b>",
+  "hit_caption": "{kind} N° {number}",
+  "gazette_line": "El Peruano · {date}",
+  "since": "desde el {date}",
+  "no_news_header": "<b>{source} · {date}</b>",
+  "no_news": "Sin novedades. No se puso en circulación ninguna moneda, medalla ni billete.",
+  "subject_hit": "{source} · {kind} N° {number}",
+  "subject_no_news": "{source} · sin novedades {date}",
+  "subject_test": "{source} · prueba",
+  "test_message": "<b>Mensaje de prueba del monitor {source}</b>\nTelegram conectado."
+}

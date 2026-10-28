@@ -1,0 +1,42 @@
+[app]
+locale = "es"
+utc_offset_hours = -5
+lookback_days = 4
+baseline_days = 3
+state_retention_days = 365
+min_seconds_between_runs = 90
+notify_when_nothing = true
+http_timeout_seconds = 60
+pdf_timeout_seconds = 240
+http_retries = 3
+retry_backoff_seconds = 2
+max_candidates = 8
+
+[source]
+name = "BCRP"
+base_url = "https://busquedas.elperuano.pe"
+accept_language = "es-PE,es;q=0.9,en;q=0.8"
+user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+
+[source.paths]
+gazette = "/cuadernillo/NL/{day}"
+dispositive = "/dispositivo/NL/{cid}-1"
+item_pdf = "/api/archivo/file/{asset}/*/{cid}-1.pdf"
+gazette_pdf = "/api/archivo/file/{asset}/*/NL{day}_{num}.pdf"
+
+[source.patterns]
+section_header_es = '''BANCO CENTRAL DE RESERVA'''
+dispositive_es = '''(CIRCULAR|RESOLUCI[OÓ]N(?:\s+DE\s+DIRECTORIO|\s+DE\s+GERENCIA\s+GENERAL|\s+GERENCIA\s+GENERAL|\s+CIRCULAR)?)\s+N[º°]?\.?\s*([0-9A-Za-z][0-9A-Za-z\-/]*?)-BCRP'''
+issue_es = '''pon(?:en|e|er|ga)\s+en\s+circulaci[oó]n|puesta\s+en\s+circulaci[oó]n'''
+item_es = '''\b(moneda|monedas|medalla|medallas|billete|billetes)\b'''
+gazette_asset = '''api/archivo/thumbnail/([A-Za-z0-9_\-]+)/'''
+gazette_number = '''NL(\d{8})_(\d+)_thumb\.jpg'''
+dispositive_id = '''\b(\d{7})-1\b'''
+dispositive_asset = '''/api/archivo/file/([A-Za-z0-9_\-]+)/'''
+page_title = '''<title>(.*?)</title>'''
+title_suffix_es = '''\s*-\s*(CIRCULAR|RESOLUCI[OÓ]N)\s*-\s*$'''
+coin_page_es = '''CIRCULAR\s+N[º°]?\.?\s*(\d{4}-\d{4})-BCRP'''
+coin_denomination_es = '''Denominaci[oó]n\s*:\s*(.+?)\s+Aleaci[oó]n'''
+coin_alloy_es = '''Aleaci[oó]n\s*:\s*(.+?)\s+(?:Peso|Peso fino|Di[aá]metro)'''
+coin_mintage_es = '''Emisi[oó]n(?:\s+m[aá]xima)?\s*:\s*(.+?)\s+(?:En el|En la|Art[ií]culo|$)'''
+coin_effective_es = '''(?:a partir del|en circulaci[oó]n desde el)\s+(\d{1,2} de \w+ de \d{4})'''

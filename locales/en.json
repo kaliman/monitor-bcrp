@@ -1,0 +1,13 @@
+{
+  "date_format": "%Y-%m-%d",
+  "hit_header": "<b>{kind} No. {number}</b>",
+  "hit_caption": "{kind} No. {number}",
+  "gazette_line": "El Peruano · {date}",
+  "since": "effective {date}",
+  "no_news_header": "<b>{source} · {date}</b>",
+  "no_news": "No news. No coin, medal or banknote was put into circulation.",
+  "subject_hit": "{source} · {kind} No. {number}",
+  "subject_no_news": "{source} · no news {date}",
+  "subject_test": "{source} · test",
+  "test_message": "<b>Test message from the {source} monitor</b>\nTelegram connected."
+}
