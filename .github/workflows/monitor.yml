@@ -1,4 +1,4 @@
-﻿name: Scheduled monitor
+name: Scheduled monitor
 
 on:
   schedule:
