@@ -6,8 +6,15 @@
   "since": "desde el {date}",
   "no_news_header": "<b>{source} · {date}</b>",
   "no_news": "Sin novedades. No se puso en circulación ninguna moneda, medalla ni billete.",
+  "pending_line": "No pude leer el diario del {dates}; lo sigo intentando.",
+  "news_header": "<b>{source} · novedades en prensa</b>",
+  "news_item": "• {title}",
+  "news_outlet": "• {title} ({outlet})",
+  "news_hint": "Aviso de prensa, no de El Peruano: confirma la fuente antes de comprar.",
   "subject_hit": "{source} · {kind} N° {number}",
   "subject_no_news": "{source} · sin novedades {date}",
+  "subject_pending": "{source} · diario pendiente {date}",
+  "subject_news": "{source} · novedades en prensa",
   "subject_test": "{source} · prueba",
   "test_message": "<b>Mensaje de prueba del monitor {source}</b>\nTelegram conectado."
 }

@@ -8,7 +8,14 @@ import re
 import sys
 
 from .config import ConfigError, load_config
-from .pipeline import local_day, probe, run_monitor, send_test
+from .pipeline import (
+    backfill,
+    check_news,
+    local_day,
+    probe,
+    run_monitor,
+    send_test,
+)
 from .state import StateError
 
 log = logging.getLogger("bcrp_monitor")
@@ -35,6 +42,17 @@ def _parser() -> argparse.ArgumentParser:
         help="inspect one gazette day",
     )
     actions.add_argument("--test", action="store_true", help="send a test message")
+    actions.add_argument(
+        "--backfill",
+        nargs="+",
+        metavar="YYYYMMDD",
+        help="process specific days, including missed editions",
+    )
+    actions.add_argument(
+        "--news",
+        action="store_true",
+        help="check the press feed only",
+    )
     parser.add_argument(
         "--reset-state", action="store_true", help="ignore the current state"
     )
@@ -54,6 +72,15 @@ def main(argv: list[str] | None = None) -> int:
                 log.error("Probe date must use YYYYMMDD")
                 return 2
             return probe(config, day, args.dry_run)
+        if args.backfill:
+            days = [str(value) for value in args.backfill]
+            invalid = [value for value in days if not re.fullmatch(r"\d{8}", value)]
+            if invalid:
+                log.error("Backfill dates must use YYYYMMDD")
+                return 2
+            return backfill(config, days, args.dry_run)
+        if args.news:
+            return check_news(config, args.dry_run)
         return run_monitor(config, args.dry_run, args.reset_state)
     except (ConfigError, StateError) as exc:
         log.error("%s", exc)

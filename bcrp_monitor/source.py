@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from html import unescape
 from urllib.parse import urljoin
 
@@ -12,6 +13,19 @@ from .http import FetchError, HttpClient
 from .models import Hit
 
 log = logging.getLogger(__name__)
+
+
+@dataclass
+class Gazette:
+    """Result of looking up one day of the gazette.
+
+    ``pdf`` is set when the edition was downloaded. ``broken`` marks a page
+    that exists but does not expose a usable PDF link: it must be retried
+    later instead of being treated as "no edition".
+    """
+
+    pdf: bytes | None = None
+    broken: bool = False
 
 
 class ElPeruano:
@@ -31,42 +45,57 @@ class ElPeruano:
         path = self._source.path(key).lstrip("/").format(**params)
         return urljoin(self._source.base_url + "/", path)
 
-    def fetch_gazette(self, day: str) -> bytes | None:
+    def fetch_gazette(self, day: str) -> Gazette:
         page_url = self.url_for("gazette", day=day)
         try:
             page = self._client.get(page_url).decode("utf-8", "replace")
         except FetchError as exc:
             log.info("Gazette %s unavailable (%s)", day, type(exc).__name__)
-            return None
+            return Gazette()
 
-        asset_match = self._source.pattern("gazette_asset").search(page)
-        number_match = next(
+        link_match = next(
             (
                 match
-                for match in self._source.pattern("gazette_number").finditer(page)
-                if match.group(1) == day
+                for match in self._source.pattern("gazette_pdf_link").finditer(page)
+                if match.group(2).startswith(f"NL{day}")
             ),
             None,
         )
-        if not asset_match or not number_match:
-            log.warning("Gazette %s has no PDF link", day)
-            return None
+        if link_match:
+            pdf_url = self.url_for(
+                "gazette_file",
+                asset=link_match.group(1),
+                filename=link_match.group(2),
+            )
+        else:
+            asset_match = self._source.pattern("gazette_asset").search(page)
+            number_match = next(
+                (
+                    match
+                    for match in self._source.pattern("gazette_number").finditer(page)
+                    if match.group(1) == day
+                ),
+                None,
+            )
+            if not asset_match or not number_match:
+                log.warning("Gazette %s has no PDF link", day)
+                return Gazette(broken=True)
+            pdf_url = self.url_for(
+                "gazette_pdf",
+                asset=asset_match.group(1),
+                day=day,
+                num=number_match.group(2),
+            )
 
-        pdf_url = self.url_for(
-            "gazette_pdf",
-            asset=asset_match.group(1),
-            day=day,
-            num=number_match.group(2),
-        )
         try:
             data = self._client.get(pdf_url, timeout=self._pdf_timeout)
         except FetchError as exc:
             log.warning("Gazette PDF %s failed (%s)", day, type(exc).__name__)
-            return None
+            return Gazette(broken=True)
         if not data.startswith(PDF_MAGIC):
             log.warning("Gazette PDF %s is not a PDF", day)
-            return None
-        return data
+            return Gazette(broken=True)
+        return Gazette(pdf=data)
 
     def resolve(self, hit: Hit) -> None:
         for cid in hit.ids[: self._max_candidates]:

@@ -61,6 +61,36 @@ class StateTests(unittest.TestCase):
         self.assertEqual(set(state.seen), {"new"})
         self.assertEqual(set(state.days), {"20200101"})
 
+    def test_pending_and_news_round_trip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "state.json"
+            state = State(
+                pending={"20261113": "2026-11-13T20:27:00+00:00"},
+                news_seen={"guid-one": "2026-11-09T14:05:00+00:00"},
+                news_last_check="2026-11-09T14:05:00+00:00",
+                news_last_alert="2026-11-09T14:05:00+00:00",
+            )
+            state.save(path)
+            loaded = State.load(path)
+            self.assertEqual(loaded.pending, state.pending)
+            self.assertEqual(loaded.news_seen, state.news_seen)
+            self.assertEqual(loaded.news_last_check, state.news_last_check)
+            self.assertEqual(loaded.news_last_alert, state.news_last_alert)
+
+    def test_prune_uses_pending_retention(self):
+        state = State(
+            pending={
+                "20260101": "2026-01-01T00:00:00+00:00",
+                "20260618": "2026-06-18T00:00:00+00:00",
+            }
+        )
+        state.prune(
+            365,
+            now=datetime(2026, 6, 19, tzinfo=timezone.utc),
+            pending_retention_days=30,
+        )
+        self.assertEqual(set(state.pending), {"20260618"})
+
 
 if __name__ == "__main__":
     unittest.main()

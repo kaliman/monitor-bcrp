@@ -4,6 +4,7 @@ utc_offset_hours = -5
 lookback_days = 4
 baseline_days = 3
 state_retention_days = 365
+pending_retention_days = 30
 min_seconds_between_runs = 90
 notify_when_nothing = true
 http_timeout_seconds = 60
@@ -22,6 +23,7 @@ user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 gazette = "/cuadernillo/NL/{day}"
 dispositive = "/dispositivo/NL/{cid}-1"
 item_pdf = "/api/archivo/file/{asset}/*/{cid}-1.pdf"
+gazette_file = "/api/archivo/file/{asset}/*/{filename}"
 gazette_pdf = "/api/archivo/file/{asset}/*/NL{day}_{num}.pdf"
 
 [source.patterns]
@@ -31,6 +33,7 @@ issue_es = '''pon(?:en|e|er|ga)\s+en\s+circulaci[oó]n|puesta\s+en\s+circulaci[o
 item_es = '''\b(moneda|monedas|medalla|medallas|billete|billetes)\b'''
 gazette_asset = '''api/archivo/thumbnail/([A-Za-z0-9_\-]+)/'''
 gazette_number = '''NL(\d{8})_(\d+)_thumb\.jpg'''
+gazette_pdf_link = '''/api/archivo/file/([A-Za-z0-9_\-]+)/\*/(NL\d{8}(?:_\d+)?\.pdf)'''
 dispositive_id = '''\b(\d{7})-1\b'''
 dispositive_asset = '''/api/archivo/file/([A-Za-z0-9_\-]+)/'''
 page_title = '''<title>(.*?)</title>'''
@@ -40,3 +43,13 @@ coin_denomination_es = '''Denominaci[oó]n\s*:\s*(.+?)\s+Aleaci[oó]n'''
 coin_alloy_es = '''Aleaci[oó]n\s*:\s*(.+?)\s+(?:Peso|Peso fino|Di[aá]metro)'''
 coin_mintage_es = '''Emisi[oó]n(?:\s+m[aá]xima)?\s*:\s*(.+?)\s+(?:En el|En la|Art[ií]culo|$)'''
 coin_effective_es = '''(?:a partir del|en circulaci[oó]n desde el)\s+(\d{1,2} de \w+ de \d{4})'''
+
+[news]
+enabled = true
+feed_url = "https://news.google.com/rss/search"
+params = "hl=es-419&gl=PE&ceid=PE:es-419"
+query = '''medalla (BCRP OR BCR OR "Banco Central de Reserva") when:7d'''
+title_es = '''(?=.*(?:BCRP|BCR|Banco Central de Reserva))(?=.*(?:medalla|moneda|billete))'''
+exclude_es = '''medalla\s+c[ií]vica|condecor|medallista|medallero|precio\s+del\s+d[oó]lar|tipo\s+de\s+cambio|es\s+falso|no\s+acu[ñn][oó]'''
+max_items = 5
+cooldown_hours = 20

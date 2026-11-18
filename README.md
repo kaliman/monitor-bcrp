@@ -13,7 +13,11 @@ Runs on GitHub Actions. No local scheduler is needed.
    and PDF.
 3. Keeps the dispositives whose official title matches the issue filter.
 4. Sends the notice through Telegram (text + PDF) and Gmail (HTML + PDF).
-5. Persists `state.json` so nothing is notified twice.
+5. Checks a filtered Google News feed for BCRP coin or medal announcements
+   that never reach the gazette (medals are not legal tender, so they often
+   have no dispositive in *El Peruano*).
+6. Persists `state.json` so nothing is notified twice and unreadable gazette
+   days are retried for up to `pending_retention_days`.
 
 ## Layout
 
@@ -24,6 +28,7 @@ bcrp_monitor/
   constants.py    protocol and format constants (Telegram, SMTP, PDF)
   http.py         HTTP client with retries
   source.py       El Peruano URLs and downloads
+  news.py         Google News RSS feed for press announcements
   extract.py      PDF parsing
   render.py       Telegram/Gmail message rendering
   notify.py       Telegram and Gmail adapters
@@ -47,11 +52,13 @@ Non-secret defaults and all site-specific values live in
 `config/settings.toml`:
 
 - `[app]`: locale, UTC offset, lookback/baseline days, retries, timeouts,
-  state retention.
+  state retention, retry window for unreadable gazettes.
 - `[source]`: base URL, `Accept-Language`, user agent.
 - `[source.paths]`: URL templates.
 - `[source.patterns]`: regexes used to parse the Spanish PDF. Keys keep the
   `_es` suffix because they match Spanish text.
+- `[news]`: Google News query and the title filters that keep only BCRP coin
+  or medal announcements. Set `enabled = false` to disable the press check.
 
 Secrets are never committed. Provide them locally in `config.local.json`
 (gitignored) or through environment variables. Environment variables take
@@ -96,6 +103,8 @@ Useful commands:
 ```bash
 python -m bcrp_monitor --dry-run          # parse, print, send nothing
 python -m bcrp_monitor --probe 20260618   # inspect one day (YYYYMMDD)
+python -m bcrp_monitor --backfill 20261113  # process a missed day
+python -m bcrp_monitor --news --dry-run   # inspect the press feed only
 python -m bcrp_monitor --test             # send a test message
 python -m bcrp_monitor                    # normal run
 python -m bcrp_monitor --reset-state      # ignore history, rebuild baseline
@@ -132,12 +141,20 @@ workflow uses it as a checkpoint between runs. It contains no personal data:
   "version": 2,
   "seen": {"Circular:0013-2026": "2026-06-18T00:00:00+00:00"},
   "days": {"20260618": "2026-06-18T00:00:00+00:00"},
+  "pending": {"20261113": "2026-11-13T20:27:00+00:00"},
+  "news_seen": {"guid": "2026-11-09T14:05:00+00:00"},
+  "news_last_check": "2026-11-09T14:05:00+00:00",
+  "news_last_alert": "2026-11-09T14:05:00+00:00",
   "last_run": "2026-06-18T01:00:00+00:00"
 }
 ```
 
 - `seen`: dispositives already notified.
 - `days`: days already processed.
+- `pending`: days whose gazette page exists but whose PDF could not be read;
+  they are retried for `pending_retention_days` and reported in the heartbeat.
+- `news_seen`, `news_last_check`, `news_last_alert`: press-feed deduplication
+  and alert cooldown.
 - `last_run`: UTC timestamp for the cooldown guard.
 
 A fork inherits the baseline. To start fresh, delete `state.json` or run with
@@ -150,6 +167,13 @@ A dispositive is notified only when its official title matches both
 restriction on denomination or topic. The regexes live in
 `config/settings.toml`; the code never hardcodes site URLs, headers or
 patterns.
+
+The press feed is narrower: it only accepts titles that match
+`news.title_es` (BCRP plus coin/medal/banknote) and rejects
+`news.exclude_es` (civic medals, awards, exchange-rate noise). Alerts are
+deduplicated by Google News id and limited to one batch every
+`news.cooldown_hours`. The first run only records a baseline, so deploying a
+new feed does not replay old headlines.
 
 ## Security
 

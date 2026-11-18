@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SETTINGS_PATH = ROOT / "config" / "settings.toml"
 LOCAL_CONFIG_PATH = ROOT / "config.local.json"
 
-REQUIRED_PATHS = {"gazette", "dispositive", "item_pdf", "gazette_pdf"}
+REQUIRED_PATHS = {"gazette", "dispositive", "item_pdf", "gazette_pdf", "gazette_file"}
 REQUIRED_PATTERNS = {
     "section_header_es",
     "dispositive_es",
@@ -23,6 +23,7 @@ REQUIRED_PATTERNS = {
     "item_es",
     "gazette_asset",
     "gazette_number",
+    "gazette_pdf_link",
     "dispositive_id",
     "dispositive_asset",
     "page_title",
@@ -46,6 +47,7 @@ class AppSettings:
     lookback_days: int
     baseline_days: int
     state_retention_days: int
+    pending_retention_days: int
     min_seconds_between_runs: int
     notify_when_nothing: bool
     http_timeout_seconds: int
@@ -87,9 +89,22 @@ class Secrets:
 
 
 @dataclass(frozen=True)
+class NewsSettings:
+    enabled: bool
+    feed_url: str
+    params: str
+    query: str
+    title: re.Pattern[str]
+    exclude: re.Pattern[str]
+    max_items: int
+    cooldown_hours: int
+
+
+@dataclass(frozen=True)
 class Config:
     app: AppSettings
     source: SourceSettings
+    news: NewsSettings
     secrets: Secrets
 
 
@@ -206,6 +221,9 @@ def _load_app(raw: dict[str, Any], local: dict[str, Any]) -> AppSettings:
         ),
         "state_retention_days",
     )
+    pending_retention = _as_int(
+        required("pending_retention_days"), "pending_retention_days"
+    )
 
     offset = _as_int(required("utc_offset_hours"), "utc_offset_hours")
     if not -12 <= offset <= 14:
@@ -217,6 +235,7 @@ def _load_app(raw: dict[str, Any], local: dict[str, Any]) -> AppSettings:
         lookback_days=lookback,
         baseline_days=baseline,
         state_retention_days=retention,
+        pending_retention_days=pending_retention,
         min_seconds_between_runs=min_seconds,
         notify_when_nothing=notify,
         http_timeout_seconds=_as_int(
@@ -281,6 +300,41 @@ def _load_source(raw: dict[str, Any]) -> SourceSettings:
     )
 
 
+def _compile(raw: dict[str, Any], key: str) -> re.Pattern[str]:
+    value = raw.get(key)
+    if not isinstance(value, str):
+        raise ConfigError(f"news.{key} must be a string")
+    try:
+        return re.compile(value, re.I)
+    except re.error as exc:
+        raise ConfigError(f"Invalid regex news.{key}: {exc}") from None
+
+
+def _load_news(raw: dict[str, Any]) -> NewsSettings:
+    news = raw.get("news")
+    if not isinstance(news, dict):
+        raise ConfigError("Missing [news] section in settings.toml")
+    feed_url = str(news.get("feed_url") or "")
+    parsed = urlparse(feed_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ConfigError("news.feed_url must be an absolute http(s) URL")
+    query = news.get("query")
+    if not isinstance(query, str) or not query.strip():
+        raise ConfigError("news.query must be a non-empty string")
+    return NewsSettings(
+        enabled=_as_bool(news.get("enabled", False), "news.enabled"),
+        feed_url=feed_url,
+        params=str(news.get("params") or ""),
+        query=query.strip(),
+        title=_compile(news, "title_es"),
+        exclude=_compile(news, "exclude_es"),
+        max_items=max(1, _as_int(news.get("max_items", 5), "news.max_items")),
+        cooldown_hours=max(
+            0, _as_int(news.get("cooldown_hours", 20), "news.cooldown_hours")
+        ),
+    )
+
+
 def load_secrets(
     require_chat_id: bool = True, local_path: Path | None = None
 ) -> Secrets:
@@ -325,11 +379,19 @@ def load_settings(
     return _load_app(raw, local), _load_source(raw)
 
 
+def load_news_settings(settings_path: Path | None = None) -> NewsSettings:
+    return _load_news(_read_toml(settings_path or SETTINGS_PATH))
+
+
 def load_config(
     require_chat_id: bool = True,
     settings_path: Path | None = None,
     local_path: Path | None = None,
 ) -> Config:
-    app, source = load_settings(settings_path, local_path)
+    raw = _read_toml(settings_path or SETTINGS_PATH)
+    local = _read_local(local_path or LOCAL_CONFIG_PATH)
+    app = _load_app(raw, local)
+    source = _load_source(raw)
+    news = _load_news(raw)
     secrets = load_secrets(require_chat_id, local_path)
-    return Config(app=app, source=source, secrets=secrets)
+    return Config(app=app, source=source, news=news, secrets=secrets)

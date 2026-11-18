@@ -8,6 +8,7 @@ from html import escape, unescape
 
 from .constants import DAY_FORMAT
 from .models import Hit
+from .news import NewsItem
 
 
 def fmt_day(day: str, messages: dict[str, str]) -> str:
@@ -39,12 +40,38 @@ def render_hit(day: str, hit: Hit, messages: dict[str, str]) -> str:
 
 
 def render_no_news(
-    day: str, messages: dict[str, str], source_name: str
+    day: str,
+    messages: dict[str, str],
+    source_name: str,
+    pending_days: list[str] | None = None,
 ) -> str:
     header = messages["no_news_header"].format(
         source=escape(source_name), date=fmt_day(day, messages)
     )
-    return f"{header}\n{escape(messages['no_news'])}"
+    lines = [header, escape(messages["no_news"])]
+    if pending_days:
+        dates = ", ".join(fmt_day(value, messages) for value in sorted(pending_days))
+        lines.append(escape(messages["pending_line"].format(dates=dates)))
+    return "\n".join(lines)
+
+
+def render_news(
+    items: list[NewsItem], messages: dict[str, str], source_name: str
+) -> str:
+    lines = [
+        messages["news_header"].format(source=escape(source_name)),
+    ]
+    for item in items:
+        if item.outlet:
+            line = messages["news_outlet"].format(
+                title=escape(item.title), outlet=escape(item.outlet)
+            )
+        else:
+            line = messages["news_item"].format(title=escape(item.title))
+        lines.append(line)
+        lines.append(escape(item.link, quote=True))
+    lines.append(escape(messages["news_hint"]))
+    return "\n".join(lines)
 
 
 def hit_subject(hit: Hit, messages: dict[str, str], source_name: str) -> str:
@@ -63,6 +90,14 @@ def no_news_subject(
     day: str, messages: dict[str, str], source_name: str
 ) -> str:
     return messages["subject_no_news"].format(
+        source=source_name, date=fmt_day(day, messages)
+    )
+
+
+def pending_subject(
+    day: str, messages: dict[str, str], source_name: str
+) -> str:
+    return messages["subject_pending"].format(
         source=source_name, date=fmt_day(day, messages)
     )
 

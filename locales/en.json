@@ -6,8 +6,15 @@
   "since": "effective {date}",
   "no_news_header": "<b>{source} · {date}</b>",
   "no_news": "No news. No coin, medal or banknote was put into circulation.",
+  "pending_line": "Could not read the gazette for {dates}; still retrying.",
+  "news_header": "<b>{source} · press roundup</b>",
+  "news_item": "• {title}",
+  "news_outlet": "• {title} ({outlet})",
+  "news_hint": "Press notice, not El Peruano: confirm the source before buying.",
   "subject_hit": "{source} · {kind} No. {number}",
   "subject_no_news": "{source} · no news {date}",
+  "subject_pending": "{source} · gazette pending {date}",
+  "subject_news": "{source} · press roundup",
   "subject_test": "{source} · test",
   "test_message": "<b>Test message from the {source} monitor</b>\nTelegram connected."
 }

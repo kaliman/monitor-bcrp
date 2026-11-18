@@ -11,13 +11,16 @@ from .extract import mark_relevant, parse_pdf
 from .http import HttpClient
 from .i18n import load_locale
 from .models import Hit
+from .news import GoogleNews
 from .notify import Gmail, Telegram
 from .render import (
     hit_caption,
     hit_subject,
     no_news_subject,
+    pending_subject,
     plain_of,
     render_hit,
+    render_news,
     render_no_news,
 )
 from .source import ElPeruano
@@ -60,6 +63,16 @@ def _build_source(config: Config) -> ElPeruano:
         pdf_timeout=config.app.pdf_timeout_seconds,
         max_candidates=config.app.max_candidates,
     )
+
+
+def _build_news(config: Config) -> GoogleNews:
+    client = HttpClient(
+        config.source,
+        timeout=config.app.http_timeout_seconds,
+        retries=config.app.http_retries,
+        backoff_seconds=config.app.retry_backoff_seconds,
+    )
+    return GoogleNews(config.news, client)
 
 
 def _notifiers(config: Config) -> tuple[Telegram, Gmail]:
@@ -127,17 +140,88 @@ def _heartbeat(
     gmail: Gmail,
     now: datetime,
     dry: bool,
+    pending_days: list[str] | None = None,
 ) -> None:
     day = now.strftime(DAY_FORMAT)
-    text = render_no_news(day, messages, config.source.name)
+    text = render_no_news(day, messages, config.source.name, pending_days)
+    subject = (
+        pending_subject(day, messages, config.source.name)
+        if pending_days
+        else no_news_subject(day, messages, config.source.name)
+    )
     if dry:
         log.info("DRY-RUN\n%s", plain_of(text))
         return
     telegram.send_text(text)
-    gmail.send(
-        no_news_subject(day, messages, config.source.name),
-        text.replace("\n", "<br>"),
-    )
+    gmail.send(subject, text.replace("\n", "<br>"))
+
+
+def _parse_cooldown(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _news_alert(
+    config: Config,
+    messages: dict[str, str],
+    news: GoogleNews,
+    state: State,
+    telegram: Telegram,
+    gmail: Gmail,
+    now: datetime,
+    dry: bool,
+    force: bool = False,
+) -> bool:
+    items = news.fetch()
+    if not items:
+        return False
+
+    stamp = _iso(now)
+    fresh = [item for item in items if item.key not in state.news_seen]
+    if state.news_last_check is None and not force:
+        for item in fresh:
+            state.news_seen[item.key] = stamp
+        state.news_last_check = stamp
+        log.info("News baseline established (%d headline(s)).", len(fresh))
+        return False
+
+    state.news_last_check = stamp
+    if not fresh:
+        return False
+
+    last_alert = _parse_cooldown(state.news_last_alert)
+    if last_alert and not force:
+        elapsed = (now - last_alert).total_seconds()
+        if elapsed < config.news.cooldown_hours * 3600:
+            log.info(
+                "News alert on cooldown; %d headline(s) held.", len(fresh)
+            )
+            return False
+
+    shown = fresh[: config.news.max_items]
+    text = render_news(shown, messages, config.source.name)
+    subject = messages["subject_news"].format(source=config.source.name)
+    if dry:
+        log.info("DRY-RUN\n%s", plain_of(text))
+        return True
+
+    sent = telegram.send_text(text)
+    sent = gmail.send(subject, text.replace("\n", "<br>")) or sent
+    if sent:
+        for item in fresh:
+            state.news_seen[item.key] = stamp
+        state.news_last_alert = stamp
+        log.info("News: %d headline(s) notified.", len(shown))
+    else:
+        log.error("News notification failed")
+    return sent
 
 
 def run_monitor(
@@ -175,23 +259,29 @@ def run_monitor(
         except ValueError:
             pass
 
-    pending = sorted(
-        day
-        for day in (
-            (now_local - timedelta(days=back)).strftime(DAY_FORMAT)
-            for back in range(config.app.lookback_days)
-        )
-        if day not in state.days
-    )
+    window = {
+        (now_local - timedelta(days=back)).strftime(DAY_FORMAT)
+        for back in range(config.app.lookback_days)
+    }
+    pending = sorted((window | set(state.pending)) - set(state.days))
+    today = now_local.strftime(DAY_FORMAT)
 
     source = _build_source(config)
+    news = _build_news(config)
     telegram, gmail = _notifiers(config)
     alerted = False
+    broken: list[str] = []
 
     for day in pending:
-        pdf = source.fetch_gazette(day)
-        if not pdf:
+        gazette = source.fetch_gazette(day)
+        if not gazette.pdf:
+            if gazette.broken:
+                state.pending.setdefault(day, _iso(now_utc))
+                if day < today:
+                    broken.append(day)
             continue
+        state.pending.pop(day, None)
+        pdf = gazette.pdf
         hits = parse_pdf(pdf, config.source)
         for hit in hits:
             source.resolve(hit)
@@ -214,12 +304,25 @@ def run_monitor(
                 continue
         state.days[day] = _iso(now_utc)
 
-    if not alerted and config.app.notify_when_nothing:
-        _heartbeat(config, messages, telegram, gmail, now_local, dry)
+    news_alerted = _news_alert(
+        config, messages, news, state, telegram, gmail, now_utc, dry
+    )
+
+    if (
+        not alerted
+        and not news_alerted
+        and config.app.notify_when_nothing
+    ):
+        _heartbeat(
+            config, messages, telegram, gmail, now_local, dry, broken
+        )
 
     if not dry:
         state.last_run = _iso(now_utc)
-        state.prune(config.app.state_retention_days)
+        state.prune(
+            config.app.state_retention_days,
+            pending_retention_days=config.app.pending_retention_days,
+        )
         state.save(state_path or STATE_PATH)
 
     if not pending:
@@ -230,12 +333,12 @@ def run_monitor(
 def probe(config: Config, day: str, dry: bool = False) -> int:
     messages = load_locale(config.app.locale)
     source = _build_source(config)
-    pdf = source.fetch_gazette(day)
-    if not pdf:
+    gazette = source.fetch_gazette(day)
+    if not gazette.pdf:
         log.error("Could not download the gazette for %s", day)
         return 1
 
-    hits = parse_pdf(pdf, config.source)
+    hits = parse_pdf(gazette.pdf, config.source)
     for hit in hits:
         source.resolve(hit)
     mark_relevant(hits, config.source)
@@ -250,6 +353,70 @@ def probe(config: Config, day: str, dry: bool = False) -> int:
 
     telegram, gmail = _notifiers(config)
     _deliver(config, messages, source, telegram, gmail, day, picked, dry)
+    return 0
+
+
+def backfill(
+    config: Config,
+    days: list[str],
+    dry: bool = False,
+    state_path: Path | None = None,
+) -> int:
+    """Process specific days that were skipped by the regular window."""
+    messages = load_locale(config.app.locale)
+    state = State.load(state_path or STATE_PATH)
+    source = _build_source(config)
+    telegram, gmail = _notifiers(config)
+    now_utc = utc_now()
+    failures = 0
+
+    for day in sorted(set(days)):
+        gazette = source.fetch_gazette(day)
+        if not gazette.pdf:
+            log.error("Could not download the gazette for %s", day)
+            failures += 1
+            continue
+        hits = parse_pdf(gazette.pdf, config.source)
+        for hit in hits:
+            source.resolve(hit)
+        mark_relevant(hits, config.source)
+        relevant = [
+            hit for hit in hits if hit.relevant and hit.key not in state.seen
+        ]
+        if relevant:
+            delivered = _deliver(
+                config, messages, source, telegram, gmail, day, relevant, dry
+            )
+            stamp = _iso(now_utc)
+            for hit in delivered:
+                state.seen[hit.key] = stamp
+            if len(delivered) < len(relevant):
+                failures += 1
+                log.warning(
+                    "Some notifications failed for %s; not marking it.", day
+                )
+                continue
+        state.days[day] = _iso(now_utc)
+        state.pending.pop(day, None)
+        log.info("Backfill: day %s processed.", day)
+
+    if not dry:
+        state.last_run = _iso(now_utc)
+        state.save(state_path or STATE_PATH)
+    return 1 if failures else 0
+
+
+def check_news(config: Config, dry: bool = False) -> int:
+    messages = load_locale(config.app.locale)
+    state = State.load()
+    news = _build_news(config)
+    telegram, gmail = _notifiers(config)
+    now = utc_now()
+    _news_alert(
+        config, messages, news, state, telegram, gmail, now, dry, force=True
+    )
+    if not dry:
+        state.save()
     return 0
 
 
